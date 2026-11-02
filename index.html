@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control Equipos · Omega Eléctrica</title>
+<meta name="theme-color" content="#1f5fbf">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Equipos">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --text: #1b2430; --muted: #64707f;
+    --line: #dfe3e8; --accent: #1f5fbf; --accent-text: #ffffff;
+    --ok: #1d7a46; --ok-bg: #e5f5ec; --warn: #9a4a00; --warn-bg: #fff1dc;
+    --info: #1f5fbf; --info-bg: #e6efff; --bad: #b42318; --bad-bg: #fdecea;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12171d; --panel: #1b222b; --text: #e8ecf1; --muted: #93a0b1;
+      --line: #2c3541; --accent: #5b9bff; --accent-text: #0b1220;
+      --ok: #4cc47f; --ok-bg: #16301f; --warn: #f0a542; --warn-bg: #3a2a10;
+      --info: #8ab6ff; --info-bg: #1a2a45; --bad: #ff7b6e; --bad-bg: #3d1a17;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  [hidden] { display: none !important; }
+  a { color: var(--accent); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button, .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+           cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+           border-radius: 8px; padding: 10px 14px; min-height: 44px; text-decoration: none; }
+  button.primary, .btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button.ghost { background: transparent; }
+  button.peligro { color: var(--bad); border-color: var(--bad); background: transparent; }
+  button:disabled { opacity: .6; cursor: progress; }
+  input, select, textarea { width: 100%; padding: 10px 12px; min-height: 44px; border: 1px solid var(--line);
+                  border-radius: 8px; background: var(--panel); }
+  textarea { min-height: 88px; resize: vertical; }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  h1 { font-size: 22px; margin: 8px 0 12px; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+
+  /* Login */
+  #vista-login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+  .caja { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+          padding: 24px; width: 100%; max-width: 380px; }
+  .caja button { width: 100%; margin-top: 18px; }
+
+  /* Barra */
+  .barra { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between;
+           gap: 8px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .marca { font-weight: 700; color: var(--text); text-decoration: none; font-size: 18px; }
+  .marca span { color: var(--accent); }
+  .barra .der { display: flex; gap: 6px; }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+
+  /* Lista */
+  .acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .filtros { display: grid; grid-template-columns: 1fr 180px; gap: 8px; }
+  @media (max-width: 520px) { .filtros { grid-template-columns: 1fr; } }
+  .lista { display: grid; gap: 8px; margin-top: 8px; }
+  .tarjeta { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+             padding: 12px 14px; color: var(--text); text-decoration: none; }
+  .tarjeta:hover { border-color: var(--accent); }
+  .t-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-bottom: 2px; }
+  .vacio { text-align: center; color: var(--muted); padding: 32px 8px; }
+
+  .chip { font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+          background: var(--line); color: var(--text); }
+  .chip.pendiente { background: var(--warn-bg); color: var(--warn); }
+  .chip.proceso { background: var(--info-bg); color: var(--info); }
+  .chip.listo { background: var(--ok-bg); color: var(--ok); }
+
+  /* Ficha */
+  .volver { display: inline-block; margin-bottom: 8px; text-decoration: none; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+  .cabecera { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .qr-panel { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .qr-panel img { width: 150px; height: 150px; background: #fff; border-radius: 6px; border: 1px solid var(--line); }
+  .qr-panel .botones { display: flex; flex-direction: column; gap: 8px; }
+  dl.datos { display: grid; grid-template-columns: minmax(130px, 34%) 1fr; gap: 6px 12px; margin: 0; }
+  dl.datos dt { color: var(--muted); }
+  dl.datos dd { margin: 0; white-space: pre-wrap; word-break: break-word; }
+  .medidas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .medida { border: 1px solid var(--line); border-radius: 8px; padding: 8px; text-align: center; }
+  .medida b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .medida span { font-size: 13px; color: var(--muted); }
+  .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 10px; }
+  .galeria figure { position: relative; margin: 0; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: var(--line); }
+  .galeria img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .videos { display: grid; gap: 8px; margin-bottom: 10px; }
+  .videos figure { position: relative; margin: 0; }
+  .videos video { width: 100%; max-height: 360px; border-radius: 8px; background: #000; }
+  .quitar { position: absolute; top: 4px; right: 4px; min-height: 32px; padding: 4px 9px; border-radius: 999px;
+            background: rgba(0,0,0,.6); color: #fff; border: none; }
+  .subir { display: inline-flex; }
+  .subir input { display: none; }
+  .fila-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* Formulario */
+  .grupo { margin-bottom: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
+  .medidas-form { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 8px; }
+  .req::after { content: " *"; color: var(--bad); }
+  .guardar { position: sticky; bottom: 0; padding: 12px 0; background: var(--bg); display: flex; gap: 8px; }
+  .guardar button { flex: 1; }
+
+  /* Escáner */
+  #lector { width: 100%; max-width: 480px; margin: 0 auto 12px; border-radius: var(--radius); overflow: hidden; background: #000; }
+
+  /* Aviso */
+  #aviso { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: calc(100% - 32px);
+           background: var(--text); color: var(--bg); padding: 12px 16px; border-radius: 8px; z-index: 20;
+           box-shadow: 0 6px 20px rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .2s; }
+  #aviso.ver { opacity: 1; }
+  #aviso.error { background: var(--bad); color: #fff; }
+
+  /* Etiqueta de impresión: impresora térmica POS-58 (papel 58 mm, área útil 48 mm) */
+  #etiqueta { display: none; }
+  @media print {
+    @page { size: 58mm 80mm; margin: 0; }
+    html, body { width: 58mm; margin: 0; padding: 0; background: #fff !important; color: #000 !important; }
+    body > *:not(#etiqueta) { display: none !important; }
+    #etiqueta { display: block; width: 48mm; margin: 0 auto; padding: 2mm 0 4mm; text-align: center;
+                font-family: Arial, Helvetica, sans-serif; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    #etiqueta img { width: 40mm; height: 40mm; display: block; margin: 0 auto 1.5mm; image-rendering: pixelated; }
+    #etiqueta .id { font-size: 15pt; font-weight: 900; letter-spacing: .5mm; line-height: 1.1; }
+    #etiqueta .cli { font-size: 10pt; font-weight: 700; line-height: 1.15; margin-top: .8mm;
+                     overflow-wrap: anywhere; max-height: 2.4em; overflow: hidden; }
+    #etiqueta .fec { font-size: 9pt; font-weight: 700; margin-top: .8mm; }
+    #etiqueta .emp { font-size: 8pt; font-weight: 700; margin-top: 1mm; }
+  }
+</style>
+</head>
+<body>
+
+<section id="vista-login" hidden>
+  <form class="caja" id="form-login">
+    <h1>Control Equipos</h1>
+    <p class="muted small">Omega Eléctrica · inicia sesión para continuar</p>
+    <label for="login-correo">Correo</label>
+    <input id="login-correo" type="email" autocomplete="username" required>
+    <label for="login-clave">Contraseña</label>
+    <input id="login-clave" type="password" autocomplete="current-password" required>
+    <button class="primary" type="submit" id="btn-entrar">Entrar</button>
+  </form>
+</section>
+
+<div id="app" hidden>
+  <header class="barra">
+    <a href="#" class="marca">Control <span>Equipos</span></a>
+    <div class="der">
+      <button class="ghost" id="btn-instalar" hidden>Instalar app</button>
+      <button class="ghost" id="btn-salir" title="Cerrar sesión">Salir</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="vista-lista" class="vista">
+      <div class="acciones">
+        <a class="btn primary" href="#nuevo">+ Nuevo equipo</a>
+        <a class="btn" href="#escanear">Escanear QR</a>
+        <button id="btn-csv" type="button">Exportar CSV</button>
+      </div>
+      <div class="filtros">
+        <input id="buscar" type="search" placeholder="Buscar por cliente, motor, encargado o ID…" aria-label="Buscar">
+        <select id="filtro-estado" aria-label="Filtrar por estado"></select>
+      </div>
+      <p id="conteo" class="muted small"></p>
+      <div id="lista" class="lista"></div>
+    </section>
+
+    <section id="vista-detalle" class="vista" hidden>
+      <a href="#" class="volver">← Equipos</a>
+      <div id="detalle"></div>
+    </section>
+
+    <section id="vista-form" class="vista" hidden>
+      <a href="#" class="volver" id="form-volver">← Volver</a>
+      <h1 id="form-titulo">Nuevo equipo</h1>
+      <form id="form-equipo" novalidate></form>
+    </section>
+
+    <section id="vista-escaner" class="vista" hidden>
+      <a href="#" class="volver">← Equipos</a>
+      <h1>Escanear QR</h1>
+      <div id="lector"></div>
+      <p class="muted" style="text-align:center">Apunta la cámara al QR pegado en el equipo.</p>
+    </section>
+  </main>
+</div>
+
+<div id="etiqueta"></div>
+<div id="aviso" role="status" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
