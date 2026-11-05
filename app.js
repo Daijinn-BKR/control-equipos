@@ -397,7 +397,39 @@ async function subirArchivos(equipoId, files, tipo) {
   if ($("#fotos")) cargarMedios(equipoId);
 }
 
-function imprimirEtiqueta(e) {
+// Impresora del taller: servicio local (impresora-taller/) que imprime el QR con el
+// comando nativo de la impresora. Si no está instalado (celular, otro PC), se usa window.print().
+const IMPRESORA_LOCAL = "http://127.0.0.1:9101";
+const marcaLocal = () => { try { localStorage.setItem("impresora_local", "1"); } catch (_) {} };
+const esPcTaller = () => { try { return localStorage.getItem("impresora_local") === "1"; } catch (_) { return false; } };
+
+async function imprimirLocal(e) {
+  const r = await fetch(IMPRESORA_LOCAL + "/imprimir", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      qr: linkEquipo(e.id),
+      id: e.id,
+      cliente: e.cliente || "",
+      fecha: fechaHora(e.creado_en),
+      empresa: "OMEGA ELÉCTRICA",
+      copias: 1,
+    }),
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "error " + r.status);
+}
+
+async function imprimirEtiqueta(e) {
+  try {
+    await imprimirLocal(e);
+    marcaLocal();
+    aviso("Etiqueta enviada a la impresora.");
+    return;
+  } catch (err) {
+    // En el PC del taller (ya se usó el servicio) no se cae a window.print(): saldría basura.
+    if (esPcTaller()) { aviso("La impresora del taller no responde. ¿Está encendida y con papel?", true); return; }
+  }
   const et = $("#etiqueta");
   // QR en blanco y negro puro, con borde blanco suficiente para que lo lea cualquier cámara.
   const src = `https://quickchart.io/qr?size=480&margin=2&ecLevel=M&dark=000000&light=ffffff&text=${encodeURIComponent(linkEquipo(e.id))}`;

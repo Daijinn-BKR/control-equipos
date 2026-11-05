@@ -21,6 +21,16 @@ Reemplazo de la app de AppSheet "Control Equipos". Es una página web que se abr
 
 > ⚠️ **Imprime los QR solo cuando la página ya esté publicada en su dirección definitiva.** El QR lleva la dirección desde donde se abrió la app; si la imprimes desde `localhost` no va a funcionar en los celulares.
 
+## Impresora térmica del taller (3nStar RPT004, Linux Mint)
+
+Esta impresora no entiende las imágenes que manda el navegador, pero sí imprime QR con su comando nativo. Por eso el PC del taller usa un pequeño servicio local (carpeta `impresora-taller/`):
+
+1. Requisito: la impresora ya debe estar agregada en CUPS con el nombre `POS80` (modo raw no es necesario; el servicio manda los datos directo).
+2. En el PC del taller, descargar la carpeta `impresora-taller` y ejecutar `bash instalar.sh`. Queda como servicio del usuario y se inicia solo.
+3. Desde ese PC, "Imprimir etiqueta QR" imprime directo (QR + ID + cliente + fecha). En celulares u otros PC, sigue funcionando el método de siempre (`window.print()`).
+
+El servicio solo escucha en `127.0.0.1:9101` y solo acepta pedidos desde la página publicada. Si la impresora tiene cortador, cambia `CORTAR = True` en `servidor.py`.
+
 ## Uso diario
 - **Equipo nuevo**: "+ Nuevo equipo" → llenar → Guardar. Solo el cliente es obligatorio.
 - **Etiqueta**: en la ficha, "Imprimir etiqueta QR" (QR + ID + cliente).
