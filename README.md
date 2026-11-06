@@ -40,6 +40,18 @@ En el formulario de un equipo, el campo **Cliente** sugiere los nombres que ya e
 - El cliente ve todos los datos de su equipo, incluidos encargados, proceso y notas.
 - Para quitar el acceso a un cliente basta borrar su perfil (también está en `alta-cliente.sql`).
 
+## Ver el equipo escaneando el QR (sin iniciar sesión)
+
+Cuando alguien escanea la etiqueta de un equipo, **ve la ficha de ese equipo sin iniciar sesión**: datos, mediciones, componentes, proceso, notas, fotos y videos, en solo lectura. Nada más: no hay forma de ver otros equipos ni una lista.
+
+**Cómo es seguro:** el QR lleva el ID y una **clave secreta** de 80 bits al azar propia de cada equipo (`...#equipo=ID&t=CLAVE`). Supabase solo entrega la ficha si ID y clave coinciden; si no, responde lo mismo que si el equipo no existiera. La clave no se muestra en la vista pública. Las fotos y videos se abren por enlaces con nombre al azar que solo conoce quien tiene la ficha; nadie puede listarlos.
+
+**Activarlo:** ejecutar `clientes.sql` completo en Supabase (SQL Editor) y esperar a que se publique la app. Los equipos que ya existían reciben su clave, pero **sus etiquetas ya impresas no la llevan**: hay que volver a imprimirlas. Un QR antiguo (solo con ID) sigue funcionando para quien inicia sesión, pero a un visitante le pide iniciar sesión.
+
+**Si una etiqueta se pierde o el enlace se comparte donde no debía:** en la ficha del equipo, **Generar enlace nuevo** (solo personal). El QR viejo deja de abrir la ficha y hay que imprimir la etiqueta otra vez. Ojo: los enlaces directos de fotos y videos que ya se hayan compartido siguen funcionando.
+
+**Qué ve el visitante:** lo mismo que una cuenta de cliente, incluidos encargados, proceso y notas. Si algún dato no debe salir hacia fuera, hay que ocultarlo.
+
 ## Impresora térmica del taller (3nStar RPT004, Linux Mint)
 
 Esta impresora no entiende las imágenes que manda el navegador, pero sí imprime QR con su comando nativo. Por eso el PC del taller usa un pequeño servicio local (carpeta `impresora-taller/`):

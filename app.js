@@ -76,8 +76,10 @@ function claseEstado(e) {
 function chipEstado(e) {
   return e ? `<span class="chip ${claseEstado(e)}">${esc(e)}</span>` : "";
 }
-function linkEquipo(id) {
-  return location.origin + location.pathname + "#equipo=" + encodeURIComponent(id);
+// Enlace del QR: ID + clave secreta del equipo. Con la clave, quien escanea ve ESE equipo sin iniciar sesión.
+function linkEquipo(e) {
+  return location.origin + location.pathname + "#equipo=" + encodeURIComponent(e.id) +
+    (e.token ? "&t=" + encodeURIComponent(e.token) : "");
 }
 function qrUrl(texto, size = 300) {
   return `https://quickchart.io/qr?size=${size}&margin=1&ecLevel=M&text=${encodeURIComponent(texto)}`;
@@ -107,8 +109,9 @@ async function iniciar() {
 function setSesion(sesion) {
   const antes = usuario;
   usuario = sesion?.user ?? null;
-  $("#vista-login").hidden = !!usuario;
   $("#app").hidden = !usuario;
+  if (usuario) { $("#vista-login").hidden = true; $("#publico").hidden = true; }
+  else mostrarSinSesion();
   if (usuario && !antes) {
     cargarPerfil().then(cargarEquipos).then(router);
     suscribir();
@@ -158,6 +161,55 @@ $("#btn-salir").addEventListener("click", async () => {
   await sb.auth.signOut();
 });
 
+// ---------- Vista pública (QR, sin iniciar sesión) ----------
+// Solo muestra UN equipo, y solo si el ID y la clave del enlace coinciden (lo comprueba Supabase).
+function enlacePublico() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  return p.get("equipo") && p.get("t") ? { id: p.get("equipo"), token: p.get("t") } : null;
+}
+
+function mostrarSinSesion() {
+  const pub = enlacePublico();
+  $("#vista-login").hidden = !!pub;
+  $("#publico").hidden = !pub;
+  if (pub) verPublico(pub);
+}
+
+async function verPublico({ id, token }) {
+  const cont = $("#detalle-publico");
+  cont.innerHTML = `<p class="vacio">Cargando…</p>`;
+  const { data, error } = await sb.rpc("equipo_publico", { p_id: id, p_token: token });
+  if (error) { cont.innerHTML = `<p class="vacio">No se pudo cargar el equipo. Revisa tu conexión.</p>`; return; }
+  if (!data) { cont.innerHTML = `<p class="vacio">No se encontró el equipo, o el enlace ya no es válido.</p>`; return; }
+  const e = data.equipo;
+  const url = (ruta) => sb.storage.from(BUCKET).getPublicUrl(ruta).data.publicUrl;
+  cont.innerHTML = `
+    <div class="panel">
+      <div class="cabecera">
+        <div>
+          <h1 style="margin:0">${esc(e.cliente || "(sin cliente)")}</h1>
+          <div class="muted">${esc(e.tipo_motor || "")}</div>
+          <div class="muted small" style="margin-top:4px">ID ${esc(e.id)}</div>
+        </div>
+        ${chipEstado(e.estado)}
+      </div>
+    </div>
+    ${panelesFicha(e)}
+    <div class="panel">
+      <h2>Fotos</h2>
+      <div class="galeria">${data.fotos.length ? data.fotos.map((r) => `
+        <figure><a href="${esc(url(r))}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(url(r))}" alt="Foto del equipo"></a></figure>`).join("")
+        : `<p class="muted small" style="grid-column:1/-1;margin:0">Sin fotos.</p>`}</div>
+    </div>
+    <div class="panel">
+      <h2>Videos</h2>
+      <div class="videos">${data.videos.length ? data.videos.map((r) => `
+        <figure><video controls preload="metadata" playsinline src="${esc(url(r))}"></video></figure>`).join("")
+        : `<p class="muted small" style="margin:0">Sin videos.</p>`}</div>
+    </div>
+    <p class="muted small">Vista de solo lectura · Creado ${fecha(e.creado_en)} · Última modificación ${fecha(e.actualizado_en)}</p>`;
+}
+
 // ---------- Datos ----------
 async function cargarEquipos() {
   const { data, error } = await sb.from("equipos").select("*").order("creado_en", { ascending: false });
@@ -178,7 +230,7 @@ function suscribir() {
       else guardarLocal(p.new);
       const h = location.hash;
       if (h === "" || h === "#") renderLista();
-      else if (p.new?.id && h === "#equipo=" + encodeURIComponent(p.new.id)) verDetalle(p.new.id, true);
+      else if (p.new?.id && new URLSearchParams(h.slice(1)).get("equipo") === p.new.id) verDetalle(p.new.id, true);
     })
     .subscribe();
 }
@@ -190,7 +242,7 @@ function mostrar(nombre) {
 }
 
 function router() {
-  if (!usuario) return;
+  if (!usuario) { mostrarSinSesion(); return; }
   const h = location.hash.slice(1);
   const p = new URLSearchParams(h);
   if (h !== "escanear") detenerEscaner();
@@ -330,36 +382,9 @@ function filaDato(c, e) {
   return `<dt>${esc(c.l)}</dt><dd>${v == null || v === "" ? '<span class="muted">—</span>' : esc(v)}</dd>`;
 }
 
-async function verDetalle(id, refresco = false) {
-  if (!refresco) mostrar("detalle");
-  const cont = $("#detalle");
-  if (!refresco) cont.innerHTML = `<p class="vacio">Cargando…</p>`;
-  const e = await buscarEquipo(id);
-  if (!e) { cont.innerHTML = `<p class="vacio">No existe un equipo con ID ${esc(id)}${soloLectura() ? " o no tienes acceso a él" : ""}.</p>`; return; }
-  const link = linkEquipo(e.id);
-  cont.innerHTML = `
-    <div class="panel">
-      <div class="cabecera">
-        <div>
-          <h1 style="margin:0">${esc(e.cliente || "(sin cliente)")}</h1>
-          <div class="muted">${esc(e.tipo_motor || "")}</div>
-        </div>
-        ${chipEstado(e.estado)}
-      </div>
-    </div>
-
-    <div class="panel qr-panel">
-      <img src="${qrUrl(link)}" alt="Código QR del equipo ${esc(e.id)}">
-      <div>
-        <div class="muted small">ID del equipo</div>
-        <div style="font-size:22px;font-weight:700;letter-spacing:1px;margin-bottom:8px">${esc(e.id)}</div>
-        <div class="botones">
-          <button type="button" id="btn-imprimir" class="primary solo-personal">Imprimir etiqueta QR</button>
-          <button type="button" id="btn-copiar">Copiar enlace</button>
-        </div>
-      </div>
-    </div>
-
+// Datos, mediciones, componentes y proceso: los usa la ficha normal y la vista pública.
+function panelesFicha(e) {
+  return `
     <div class="panel">
       <h2>Datos</h2>
       <dl class="datos">${GENERAL.map((c) => filaDato(c, e)).join("")}</dl>
@@ -381,6 +406,41 @@ async function verDetalle(id, refresco = false) {
       <h2>Proceso y notas</h2>
       <dl class="datos">${CIERRE.map((c) => filaDato(c, e)).join("")}</dl>
     </div>
+  `;
+}
+
+async function verDetalle(id, refresco = false) {
+  if (!refresco) mostrar("detalle");
+  const cont = $("#detalle");
+  if (!refresco) cont.innerHTML = `<p class="vacio">Cargando…</p>`;
+  const e = await buscarEquipo(id);
+  if (!e) { cont.innerHTML = `<p class="vacio">No existe un equipo con ID ${esc(id)}${soloLectura() ? " o no tienes acceso a él" : ""}.</p>`; return; }
+  const link = linkEquipo(e);
+  cont.innerHTML = `
+    <div class="panel">
+      <div class="cabecera">
+        <div>
+          <h1 style="margin:0">${esc(e.cliente || "(sin cliente)")}</h1>
+          <div class="muted">${esc(e.tipo_motor || "")}</div>
+        </div>
+        ${chipEstado(e.estado)}
+      </div>
+    </div>
+
+    <div class="panel qr-panel">
+      <img src="${qrUrl(link)}" alt="Código QR del equipo ${esc(e.id)}">
+      <div>
+        <div class="muted small">ID del equipo</div>
+        <div style="font-size:22px;font-weight:700;letter-spacing:1px;margin-bottom:8px">${esc(e.id)}</div>
+        <div class="botones">
+          <button type="button" id="btn-imprimir" class="primary solo-personal">Imprimir etiqueta QR</button>
+          <button type="button" id="btn-copiar">Copiar enlace</button>
+          <button type="button" id="btn-regenerar" class="solo-personal">Generar enlace nuevo</button>
+        </div>
+      </div>
+    </div>
+
+    ${panelesFicha(e)}
 
     <div class="panel">
       <h2>Fotos</h2>
@@ -411,6 +471,7 @@ async function verDetalle(id, refresco = false) {
     try { await navigator.clipboard.writeText(link); aviso("Enlace copiado."); }
     catch { prompt("Copia el enlace:", link); }
   };
+  $("#btn-regenerar").onclick = () => regenerarEnlace(e);
   $("#btn-eliminar").onclick = () => eliminarEquipo(e);
   $("#in-fotos").onchange = (ev) => subirArchivos(e.id, ev.target.files, "foto");
   $("#in-videos").onchange = (ev) => subirArchivos(e.id, ev.target.files, "video");
@@ -525,7 +586,7 @@ async function imprimirLocal(e) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      qr: linkEquipo(e.id),
+      qr: linkEquipo(e),
       id: e.id,
       cliente: e.cliente || "",
       fecha: fechaHora(e.creado_en),
@@ -549,7 +610,7 @@ async function imprimirEtiqueta(e) {
   }
   const et = $("#etiqueta");
   // QR en blanco y negro puro, con borde blanco suficiente para que lo lea cualquier cámara.
-  const src = `https://quickchart.io/qr?size=480&margin=2&ecLevel=M&dark=000000&light=ffffff&text=${encodeURIComponent(linkEquipo(e.id))}`;
+  const src = `https://quickchart.io/qr?size=480&margin=2&ecLevel=M&dark=000000&light=ffffff&text=${encodeURIComponent(linkEquipo(e))}`;
   et.innerHTML = `
     <img alt="" src="${src}">
     <div class="id">${esc(e.id)}</div>
@@ -560,6 +621,19 @@ async function imprimirEtiqueta(e) {
   const lanzar = () => setTimeout(() => window.print(), 100);
   if (img.complete) lanzar();
   else { img.onload = lanzar; img.onerror = () => aviso("No se pudo generar el QR (¿sin internet?).", true); }
+}
+
+// Si una etiqueta se pierde o el enlace se comparte donde no debía: se cambia la clave y el QR viejo
+// deja de abrir la ficha sin sesión (hay que imprimir la etiqueta otra vez).
+async function regenerarEnlace(e) {
+  if (soloLectura()) return;
+  if (!confirm("¿Generar un enlace nuevo para este equipo?\n\nLas etiquetas QR ya impresas dejarán de abrir la ficha sin iniciar sesión y habrá que imprimir una nueva.")) return;
+  const token = [...crypto.getRandomValues(new Uint8Array(10))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const { data, error } = await sb.from("equipos").update({ token }).eq("id", e.id).select().single();
+  if (error) { aviso(error.message, true); return; }
+  guardarLocal(data);
+  aviso("Enlace nuevo generado. Imprime la etiqueta otra vez.");
+  verDetalle(e.id, true);
 }
 
 async function eliminarEquipo(e) {

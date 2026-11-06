@@ -158,5 +158,35 @@ end $$;
 revoke execute on function cuentas_listar(), cuenta_asignar(uuid, text, text), cuenta_quitar(uuid) from public, anon;
 grant  execute on function cuentas_listar(), cuenta_asignar(uuid, text, text), cuenta_quitar(uuid) to authenticated;
 
+-- ============ ENLACE PÚBLICO POR QR (sin iniciar sesión) ============
+-- Cada equipo tiene una clave secreta ("token"). El QR lleva el ID + esa clave. Quien escanea
+-- el QR puede ver ESE equipo sin iniciar sesión; sin la clave correcta no obtiene nada, y no
+-- hay forma de listar ni adivinar otros equipos (la clave tiene 80 bits al azar).
+-- Los equipos que ya existen reciben su clave al ejecutar esto; hay que volver a imprimir
+-- sus etiquetas para que el QR incluya la clave (los QR antiguos siguen funcionando con sesión).
+alter table equipos add column if not exists token text not null
+  default substr(md5(gen_random_uuid()::text || clock_timestamp()::text), 1, 20);
+create unique index if not exists equipos_token_idx on equipos(token);
+
+-- Devuelve la ficha (sin datos internos) y las rutas de fotos/videos SOLO si ID y clave coinciden;
+-- si no, devuelve nulo (igual para "no existe" que para "clave incorrecta").
+create or replace function equipo_publico(p_id text, p_token text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'equipo', to_jsonb(e) - 'creado_por' - 'token',
+    'fotos',  coalesce((select jsonb_agg(f.ruta order by f.creado_en) from fotos_equipo f where f.equipo_id = e.id), '[]'::jsonb),
+    'videos', coalesce((select jsonb_agg(v.ruta order by v.creado_en) from videos_equipo v where v.equipo_id = e.id), '[]'::jsonb)
+  )
+  from equipos e
+  where e.id = p_id and length(coalesce(p_token, '')) >= 16 and e.token = p_token
+$$;
+revoke execute on function equipo_publico(text, text) from public;
+grant  execute on function equipo_publico(text, text) to anon, authenticated;
+
+-- Fotos y videos: el bucket pasa a público para que quien abra el QR pueda verlos. Es seguro
+-- porque nadie puede LISTAR el bucket (no hay política de lectura para anónimos) y cada archivo
+-- tiene un nombre al azar imposible de adivinar: solo se conoce por la ficha de su QR.
+update storage.buckets set public = true where id = 'equipos';
+
 -- Que Supabase reconozca de inmediato las funciones nuevas (si no, puede tardar un rato).
 notify pgrst, 'reload schema';
