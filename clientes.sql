@@ -157,3 +157,6 @@ end $$;
 
 revoke execute on function cuentas_listar(), cuenta_asignar(uuid, text, text), cuenta_quitar(uuid) from public, anon;
 grant  execute on function cuentas_listar(), cuenta_asignar(uuid, text, text), cuenta_quitar(uuid) to authenticated;
+
+-- Que Supabase reconozca de inmediato las funciones nuevas (si no, puede tardar un rato).
+notify pgrst, 'reload schema';
