@@ -62,6 +62,14 @@
   .marca { font-weight: 700; color: var(--text); text-decoration: none; font-size: 18px; }
   .marca span { color: var(--accent); }
   .barra .der { display: flex; gap: 6px; align-items: center; }
+  .izq { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .logo-link { display: block; line-height: 0; border-radius: 6px; }
+  /* El logo es azul: sobre fondo oscuro se apoya en una base blanca para que se lea */
+  .logo { height: 36px; width: auto; display: block; background: #fff; border-radius: 6px; padding: 2px 4px; }
+  .nav { min-height: 40px; padding: 8px 12px; font-weight: 600; }
+  #nav-eq { display: none; }
+  body.en-bob #nav-eq { display: inline-flex; }
+  body.en-bob #nav-bob { display: none; }
   #cuenta { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Cuentas de cliente: solo lectura */
   .cuenta { padding: 10px 0; border-top: 1px solid var(--line); }
@@ -175,7 +183,11 @@
 
 <div id="app" hidden>
   <header class="barra">
-    <a href="#" class="marca">Control <span>Equipos</span></a>
+    <div class="izq">
+      <a class="btn nav solo-personal" id="nav-eq" href="#">Equipos</a>
+      <a href="#" class="logo-link" id="logo-link" aria-label="Omega Eléctrica, inicio"><img class="logo" src="icons/logo-omega.png" alt="Omega Eléctrica"></a>
+      <a class="btn nav solo-personal" id="nav-bob" href="#bobinado">Bobinado</a>
+    </div>
     <div class="der">
       <span id="cuenta" class="muted small" hidden></span>
       <button class="ghost" id="btn-instalar" hidden>Instalar app</button>
@@ -185,10 +197,10 @@
 
   <main>
     <section id="vista-lista" class="vista">
+      <h1>Control de equipos</h1>
       <div class="acciones">
         <a class="btn primary solo-personal" href="#nuevo">+ Nuevo equipo</a>
         <a class="btn" href="#escanear">Escanear QR</a>
-        <a class="btn solo-personal" href="#bobinado">Bobinado</a>
         <a class="btn solo-personal" href="#cuentas">Cuentas de clientes</a>
         <button id="btn-csv" type="button">Exportar CSV</button>
       </div>

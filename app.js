@@ -239,6 +239,9 @@ function suscribir() {
 // ---------- Navegación ----------
 function mostrar(nombre) {
   for (const v of document.querySelectorAll(".vista")) v.hidden = v.id !== "vista-" + nombre;
+  const enBob = nombre.startsWith("bobinado");
+  document.body.classList.toggle("en-bob", enBob);
+  $("#logo-link").setAttribute("href", enBob ? "#bobinado" : "#");
   window.scrollTo(0, 0);
 }
 
@@ -775,15 +778,21 @@ const CAMPOS_BOB = [
   { k: "volt", l: "Volt", ph: "Ej: 380" },
   { k: "kw", l: "KW", num: true, ph: "Ej: 7,5" },
   { k: "rpm", l: "RPM", num: true, ph: "Ej: 1450" },
-  { k: "fecha", l: "Fecha", fecha: true, req: true },
+  { k: "fecha", l: "Fecha (mes y año)", fecha: true },
 ];
 let bobinados = [];
 
-const hoyISO = () => {
-  const d = new Date(), p = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+// La fecha del bobinado es solo mes y año (se guarda como el día 1 de ese mes).
+const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+const fechaBob = (f) => {
+  const m = String(f ?? "").match(/^(\d{4})-(\d{2})/);
+  return m ? `${MESES[Number(m[2]) - 1]} ${m[1]}` : "";
 };
-const fechaBob = (f) => (f ? String(f).split("-").reverse().join("-") : "");
+const mesAnioDe = (f) => {
+  const m = String(f ?? "").match(/^(\d{4})-(\d{2})/);
+  const hoy = new Date();
+  return m ? { mes: Number(m[2]), anio: Number(m[1]) } : { mes: hoy.getMonth() + 1, anio: hoy.getFullYear() };
+};
 const linkBob = (b) => location.origin + location.pathname + "#bobinado=" + encodeURIComponent(b.id);
 function especBob(b) {
   return [b.tipo_motor, b.volt && b.volt + " V", b.kw != null && numero(b.kw) + " KW", b.rpm != null && numero(b.rpm) + " RPM"]
@@ -956,7 +965,14 @@ async function imprimirBobinado(b) {
 function campoBob(c, val) {
   const id = "fb-" + c.k;
   const lab = `<label for="${id}" class="${c.req ? "req" : ""}">${esc(c.l)}</label>`;
-  if (c.fecha) return `${lab}<input id="${id}" name="${c.k}" type="date" required value="${esc(val)}">`;
+  if (c.fecha) {
+    const { mes, anio } = mesAnioDe(val);
+    return `<label for="fb-mes">${esc(c.l)}</label>
+      <div class="grid2" style="gap:8px">
+        <select id="fb-mes" name="mes">${MESES.map((n, i) => `<option value="${i + 1}"${i + 1 === mes ? " selected" : ""}>${n}</option>`).join("")}</select>
+        <input id="fb-anio" name="anio" type="number" inputmode="numeric" min="2000" max="2100" step="1" value="${anio}" aria-label="Año">
+      </div>`;
+  }
   const lista = c.k === "cliente" || c.k === "encargado" || c.k === "tipo_motor";
   const dl = lista ? `<datalist id="dlb-${c.k}">${opcionesBob(c.k).map((o) => `<option value="${esc(o)}">`).join("")}</datalist>` : "";
   return `${lab}<input id="${id}" name="${c.k}" type="text" autocomplete="off"${lista ? ` list="dlb-${c.k}"` : ""}` +
@@ -979,7 +995,7 @@ async function verFormBob(id) {
   $("#form-bob-volver").href = volver;
   f.dataset.id = b ? b.id : "";
   const val = (c) => {
-    if (!b) return c.fecha ? hoyISO() : "";
+    if (!b) return "";
     const v = b[c.k];
     return v == null ? "" : c.num ? String(v).replace(".", ",") : v;
   };
@@ -1001,6 +1017,12 @@ $("#form-bobinado").addEventListener("submit", async (ev) => {
   const id = f.dataset.id;
   const datos = {};
   for (const c of CAMPOS_BOB) {
+    if (c.fecha) {
+      const anio = Number(f.elements.anio.value);
+      if (!Number.isInteger(anio) || anio < 2000 || anio > 2100) { aviso("El año no es válido.", true); f.elements.anio.focus(); return; }
+      datos.fecha = `${anio}-${String(f.elements.mes.value).padStart(2, "0")}-01`;
+      continue;
+    }
     const v = (f.elements[c.k]?.value ?? "").trim();
     if (c.req && !v) { aviso(`Falta ${c.l.toLowerCase()}.`, true); f.elements[c.k].focus(); return; }
     if (c.num && v) {
