@@ -1,6 +1,6 @@
 // Guarda la pantalla de la app para que abra rápido.
 // Los datos (Supabase) nunca se guardan aquí: siempre se piden en línea.
-const CACHE = "control-equipos-v4";
+const CACHE = "control-equipos-v5";
 const BASE = ["./", "index.html", "app.js", "config.js", "manifest.webmanifest", "icons/icon-192.png", "icons/logo-omega.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {

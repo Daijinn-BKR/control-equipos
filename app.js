@@ -1106,6 +1106,29 @@ $("#btn-csv").addEventListener("click", () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 });
 
+// ---------- Modo claro / oscuro ----------
+// Por defecto sigue al sistema; el botón de la barra lo cambia y se recuerda en este navegador.
+const oscuroMQ = window.matchMedia("(prefers-color-scheme: dark)");
+function temaActual() {
+  const t = document.documentElement.dataset.theme;
+  return t === "dark" ? "oscuro" : t === "light" ? "claro" : oscuroMQ.matches ? "oscuro" : "claro";
+}
+function pintarTema() {
+  const t = temaActual();
+  document.documentElement.dataset.temaActual = t;
+  const m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute("content", t === "oscuro" ? "#12171d" : "#1f5fbf");
+  $("#btn-tema").setAttribute("aria-pressed", String(t === "oscuro"));
+}
+$("#btn-tema").addEventListener("click", () => {
+  const nuevo = temaActual() === "oscuro" ? "claro" : "oscuro";
+  document.documentElement.dataset.theme = nuevo === "oscuro" ? "dark" : "light";
+  try { localStorage.setItem("tema", nuevo); } catch (_) {}
+  pintarTema();
+});
+oscuroMQ.addEventListener?.("change", pintarTema);
+pintarTema();
+
 // ---------- Instalar como app ----------
 let pedidoInstalar = null;
 window.addEventListener("beforeinstallprompt", (ev) => {
