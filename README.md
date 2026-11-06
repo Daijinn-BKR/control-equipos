@@ -52,6 +52,16 @@ Cuando alguien escanea la etiqueta de un equipo, **ve la ficha de ese equipo sin
 
 **Qué ve el visitante:** lo mismo que una cuenta de cliente, incluidos encargados, proceso y notas. Si algún dato no debe salir hacia fuera, hay que ocultarlo.
 
+## Bobinado (solo personal)
+
+Apartado para registrar los motores que entran a bobinado. En la pantalla principal, botón **Bobinado**:
+
+- **+ Nuevo bobinado** pide: cliente, encargado, tipo de motor, volt, KW, RPM y fecha (por defecto, hoy). Al guardar se crea el QR.
+- La ficha muestra el QR y los datos, con **Imprimir etiqueta QR**, **Copiar enlace**, **Editar** y **Eliminar**. La etiqueta lleva el título BOBINADO, el QR, el ID, el cliente y todos los datos.
+- El QR abre la ficha del bobinado, pero **solo si quien escanea inició sesión como personal**. Los clientes y los visitantes no ven nada de este apartado (lo garantiza Supabase, no solo la pantalla).
+
+**Activarlo:** ejecutar `bobinado.sql` completo en Supabase (SQL Editor → Run), después de `clientes.sql`. Para que la etiqueta impresa en el PC del taller incluya los datos del motor, ejecutar otra vez `bash instalar.sh` en la carpeta `impresora-taller` de ese PC (actualiza el servicio).
+
 ## Impresora térmica del taller (3nStar RPT004, Linux Mint)
 
 Esta impresora no entiende las imágenes que manda el navegador, pero sí imprime QR con su comando nativo. Por eso el PC del taller usa un pequeño servicio local (carpeta `impresora-taller/`):
@@ -74,6 +84,7 @@ Las listas de sugerencias (tipo de motor, tipo de mantenimiento, rodamientos y e
 | Archivo | Para qué |
 |---|---|
 | `schema.sql` | Tablas, reglas de seguridad y bucket de fotos/videos (se ejecuta una vez en Supabase) |
+| `bobinado.sql` | Tabla del apartado Bobinado, solo para el personal (se ejecuta una vez en Supabase) |
 | `config.js` | URL y clave de Supabase, y listas de opciones |
 | `index.html` | Pantalla y estilos |
 | `app.js` | Lógica de la aplicación |

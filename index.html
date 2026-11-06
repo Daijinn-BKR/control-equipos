@@ -146,6 +146,8 @@
                      overflow-wrap: anywhere; max-height: 2.4em; overflow: hidden; }
     #etiqueta .fec { font-size: 9pt; font-weight: 700; margin-top: .8mm; }
     #etiqueta .emp { font-size: 8pt; font-weight: 700; margin-top: 1mm; }
+    #etiqueta .tit { font-size: 11pt; font-weight: 900; letter-spacing: .6mm; margin-bottom: 1mm; }
+    #etiqueta .det { font-size: 9pt; font-weight: 700; line-height: 1.25; margin-top: .8mm; text-align: left; padding: 0 2mm; }
   }
 </style>
 </head>
@@ -186,6 +188,7 @@
       <div class="acciones">
         <a class="btn primary solo-personal" href="#nuevo">+ Nuevo equipo</a>
         <a class="btn" href="#escanear">Escanear QR</a>
+        <a class="btn solo-personal" href="#bobinado">Bobinado</a>
         <a class="btn solo-personal" href="#cuentas">Cuentas de clientes</a>
         <button id="btn-csv" type="button">Exportar CSV</button>
       </div>
@@ -207,6 +210,28 @@
       <h1>Cuentas de clientes</h1>
       <p class="muted small" id="cuentas-ayuda"></p>
       <div id="cuentas-lista"></div>
+    </section>
+
+    <section id="vista-bobinado" class="vista" hidden>
+      <a href="#" class="volver">← Equipos</a>
+      <h1>Bobinado</h1>
+      <div class="acciones">
+        <a class="btn primary" href="#bobinado-nuevo">+ Nuevo bobinado</a>
+      </div>
+      <input id="buscar-bob" type="search" placeholder="Buscar por cliente, encargado, motor o ID…" aria-label="Buscar bobinados">
+      <p id="conteo-bob" class="muted small"></p>
+      <div id="lista-bob" class="lista"></div>
+    </section>
+
+    <section id="vista-bobinado-ficha" class="vista" hidden>
+      <a href="#bobinado" class="volver">← Bobinado</a>
+      <div id="detalle-bob"></div>
+    </section>
+
+    <section id="vista-bobinado-form" class="vista" hidden>
+      <a href="#bobinado" class="volver" id="form-bob-volver">← Volver</a>
+      <h1 id="form-bob-titulo">Nuevo bobinado</h1>
+      <form id="form-bobinado" novalidate></form>
     </section>
 
     <section id="vista-form" class="vista" hidden>

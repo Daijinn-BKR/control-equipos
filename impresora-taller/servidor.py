@@ -66,15 +66,19 @@ def qr_nativo(texto):
 
 
 def etiqueta(d):
-    """Arma los bytes ESC/POS de una etiqueta (misma info que la etiqueta de la página)."""
+    """Arma los bytes ESC/POS de una etiqueta (misma info que la etiqueta de la página).
+    Si d["tipo"] == "bobinado" se agrega el título y los datos del motor."""
     qr = str(d.get("qr") or "")
     if not qr or len(qr) > 500:
         raise ValueError("qr inválido")
+    bobinado = d.get("tipo") == "bobinado"
     b = ESC + b"@"                                     # reiniciar
     b += ESC + b"t\x02"                                # tabla de caracteres CP850
     b += ESC + b"a\x01"                                # centrar
     if LOGO:
         b += LOGO + b"\n"                              # logo encima del QR
+    if bobinado:
+        b += ESC + b"E\x01" + GS + b"!\x01" + b"BOBINADO\n" + GS + b"!\x00" + ESC + b"E\x00"
     b += qr_nativo(qr) + b"\n"
     b += ESC + b"E\x01"                                # negrita
     b += cod(d.get("id"), 32) + b"\n"                  # ID en tamaño normal
@@ -82,7 +86,14 @@ def etiqueta(d):
     for linea in lineas_cliente(d.get("cliente")):
         b += cod(linea, ANCHO_CLIENTE) + b"\n"         # cliente grande
     b += GS + b"!\x00" + ESC + b"E\x00"                # tamaño normal, sin negrita
-    if d.get("fecha"):
+    if bobinado:
+        b += ESC + b"a\x00"                            # datos alineados a la izquierda
+        for etq, clave in (("Encargado", "encargado"), ("Motor", "motor"), ("Volt", "volt"),
+                           ("KW", "kw"), ("RPM", "rpm"), ("Fecha", "fecha")):
+            if d.get(clave):
+                b += cod(etq + ": " + str(d[clave]), 48) + b"\n"
+        b += ESC + b"a\x01"
+    elif d.get("fecha"):
         b += cod("Ingreso: " + str(d["fecha"]), 48) + b"\n"
     if not LOGO:                                       # sin logo, nombre de la empresa en texto
         b += ESC + b"E\x01" + cod(d.get("empresa") or "OMEGA ELÉCTRICA", 32) + b"\n" + ESC + b"E\x00"

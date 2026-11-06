@@ -118,6 +118,7 @@ function setSesion(sesion) {
   }
   if (!usuario && antes) {
     equipos = [];
+    bobinados = [];
     perfil = null;
     aplicarPerfil();
     if (canal) { sb.removeChannel(canal); canal = null; }
@@ -246,7 +247,8 @@ function router() {
   const h = location.hash.slice(1);
   const p = new URLSearchParams(h);
   if (h !== "escanear") detenerEscaner();
-  if (soloLectura() && (p.has("editar") || h === "nuevo" || h === "cuentas")) { location.hash = ""; return; }
+  if (soloLectura() && (p.has("editar") || h === "nuevo" || h === "cuentas" || h.startsWith("bobinado"))) { location.hash = ""; return; }
+  if (h.startsWith("bobinado")) return routerBobinado(h, p);
   if (p.has("equipo")) return verDetalle(p.get("equipo"));
   if (p.has("editar")) return verFormulario(p.get("editar"));
   if (h === "nuevo") return verFormulario(null);
@@ -581,21 +583,25 @@ const IMPRESORA_LOCAL = "http://127.0.0.1:9101";
 const marcaLocal = () => { try { localStorage.setItem("impresora_local", "1"); } catch (_) {} };
 const esPcTaller = () => { try { return localStorage.getItem("impresora_local") === "1"; } catch (_) { return false; } };
 
-async function imprimirLocal(e) {
+async function enviarLocal(payload) {
   const r = await fetch(IMPRESORA_LOCAL + "/imprimir", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      qr: linkEquipo(e),
-      id: e.id,
-      cliente: e.cliente || "",
-      fecha: fechaHora(e.creado_en),
-      empresa: "OMEGA ELÉCTRICA",
-      copias: 1,
-    }),
+    body: JSON.stringify(payload),
     signal: AbortSignal.timeout(6000),
   });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "error " + r.status);
+}
+
+function imprimirLocal(e) {
+  return enviarLocal({
+    qr: linkEquipo(e),
+    id: e.id,
+    cliente: e.cliente || "",
+    fecha: fechaHora(e.creado_en),
+    empresa: "OMEGA ELÉCTRICA",
+    copias: 1,
+  });
 }
 
 async function imprimirEtiqueta(e) {
@@ -759,6 +765,267 @@ $("#form-equipo").addEventListener("submit", async (ev) => {
   location.hash = "equipo=" + encodeURIComponent(res.data.id);
 });
 
+// ---------- Bobinado (solo personal) ----------
+// Registro de motores en bobinado: cada uno genera un QR que abre su ficha (hay que haber
+// iniciado sesión como personal). La protección real está en bobinado.sql.
+const CAMPOS_BOB = [
+  { k: "cliente", l: "Cliente", req: true },
+  { k: "encargado", l: "Encargado" },
+  { k: "tipo_motor", l: "Tipo de motor" },
+  { k: "volt", l: "Volt", ph: "Ej: 380" },
+  { k: "kw", l: "KW", num: true, ph: "Ej: 7,5" },
+  { k: "rpm", l: "RPM", num: true, ph: "Ej: 1450" },
+  { k: "fecha", l: "Fecha", fecha: true, req: true },
+];
+let bobinados = [];
+
+const hoyISO = () => {
+  const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+const fechaBob = (f) => (f ? String(f).split("-").reverse().join("-") : "");
+const linkBob = (b) => location.origin + location.pathname + "#bobinado=" + encodeURIComponent(b.id);
+function especBob(b) {
+  return [b.tipo_motor, b.volt && b.volt + " V", b.kw != null && numero(b.kw) + " KW", b.rpm != null && numero(b.rpm) + " RPM"]
+    .filter(Boolean).join(" · ");
+}
+function opcionesBob(k) {
+  const base = k === "cliente" ? opciones("cliente") : k === "tipo_motor" ? opciones("tipo_motor") : [];
+  const vistos = new Map();
+  for (const n of unicos([...base, ...bobinados.map((b) => b[k])])) {
+    const key = normNombre(n);
+    if (!vistos.has(key)) vistos.set(key, String(n).trim());
+  }
+  return [...vistos.values()];
+}
+
+async function cargarBobinados() {
+  const { data, error } = await sb.from("bobinados").select("*").order("creado_en", { ascending: false });
+  if (error) {
+    aviso(error.code === "PGRST205" || error.code === "42P01"
+      ? "Falta ejecutar bobinado.sql en Supabase (ver README)."
+      : "Error al cargar bobinados: " + error.message, true);
+    return false;
+  }
+  bobinados = data;
+  return true;
+}
+
+function guardarBob(b) {
+  const i = bobinados.findIndex((x) => x.id === b.id);
+  if (i >= 0) bobinados[i] = b; else bobinados.unshift(b);
+}
+
+async function buscarBob(id) {
+  const b = bobinados.find((x) => x.id === id);
+  if (b) return b;
+  const { data, error } = await sb.from("bobinados").select("*").eq("id", id).maybeSingle();
+  if (error) { aviso(error.message, true); return null; }
+  if (data) guardarBob(data);
+  return data;
+}
+
+function routerBobinado(h, p) {
+  if (h === "bobinado") return verListaBob();
+  if (h === "bobinado-nuevo") return verFormBob(null);
+  if (p.has("bobinado-editar")) return verFormBob(p.get("bobinado-editar"));
+  if (p.has("bobinado")) return verFichaBob(p.get("bobinado"));
+  location.hash = "bobinado";
+}
+
+// --- Lista ---
+async function verListaBob() {
+  mostrar("bobinado");
+  renderListaBob();
+  if (await cargarBobinados() && !$("#vista-bobinado").hidden) renderListaBob();
+}
+
+function renderListaBob() {
+  const q = $("#buscar-bob").value.trim().toLowerCase();
+  const lista = bobinados.filter((b) => !q ||
+    [b.id, b.cliente, b.encargado, b.tipo_motor, b.volt].some((v) => String(v ?? "").toLowerCase().includes(q)));
+  $("#conteo-bob").textContent = `${lista.length} de ${bobinados.length} bobinados`;
+  $("#lista-bob").innerHTML = lista.length
+    ? lista.map((b) => `
+      <a class="tarjeta" href="#bobinado=${encodeURIComponent(b.id)}">
+        <div class="t-top"><strong>${esc(b.cliente || "(sin cliente)")}</strong><span class="muted small">${esc(fechaBob(b.fecha))}</span></div>
+        <div class="muted">${esc(especBob(b))}</div>
+        <div class="muted small">ID ${esc(b.id)}${b.encargado ? " · " + esc(b.encargado) : ""}</div>
+      </a>`).join("")
+    : `<p class="vacio">${bobinados.length ? "No hay bobinados que coincidan." : "Todavía no hay bobinados. Toca “+ Nuevo bobinado”."}</p>`;
+}
+$("#buscar-bob").addEventListener("input", renderListaBob);
+
+// --- Ficha con QR ---
+async function verFichaBob(id) {
+  mostrar("bobinado-ficha");
+  const cont = $("#detalle-bob");
+  cont.innerHTML = `<p class="vacio">Cargando…</p>`;
+  const b = await buscarBob(id);
+  if (!b) { cont.innerHTML = `<p class="vacio">No existe un bobinado con ID ${esc(id)}.</p>`; return; }
+  const link = linkBob(b);
+  const v = { ...b, fecha: fechaBob(b.fecha), kw: b.kw == null ? null : numero(b.kw), rpm: b.rpm == null ? null : numero(b.rpm) };
+  cont.innerHTML = `
+    <div class="panel">
+      <h1 style="margin:0">${esc(b.cliente || "(sin cliente)")}</h1>
+      <div class="muted">${esc(especBob(b))}</div>
+    </div>
+
+    <div class="panel qr-panel">
+      <img src="${qrUrl(link)}" alt="Código QR del bobinado ${esc(b.id)}">
+      <div>
+        <div class="muted small">ID del bobinado</div>
+        <div style="font-size:22px;font-weight:700;letter-spacing:1px;margin-bottom:8px">${esc(b.id)}</div>
+        <div class="botones">
+          <button type="button" id="btn-imprimir-bob" class="primary">Imprimir etiqueta QR</button>
+          <button type="button" id="btn-copiar-bob">Copiar enlace</button>
+        </div>
+        <p class="muted small" style="margin:8px 0 0">Solo el personal que inicie sesión puede abrir este QR.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Datos</h2>
+      <dl class="datos">${CAMPOS_BOB.map((c) => filaDato(c, v)).join("")}</dl>
+    </div>
+
+    <div class="fila-acciones">
+      <a class="btn primary" href="#bobinado-editar=${encodeURIComponent(b.id)}">Editar</a>
+      <button type="button" class="peligro" id="btn-eliminar-bob">Eliminar</button>
+    </div>
+    <p class="muted small">Creado ${fecha(b.creado_en)} · Última modificación ${fecha(b.actualizado_en)}</p>`;
+  $("#btn-imprimir-bob").onclick = () => imprimirBobinado(b);
+  $("#btn-copiar-bob").onclick = async () => {
+    try { await navigator.clipboard.writeText(link); aviso("Enlace copiado."); }
+    catch { prompt("Copia el enlace:", link); }
+  };
+  $("#btn-eliminar-bob").onclick = async () => {
+    if (!confirm(`¿Eliminar el bobinado ${b.id} (${b.cliente || "sin cliente"})? No se puede deshacer.`)) return;
+    const { error } = await sb.from("bobinados").delete().eq("id", b.id);
+    if (error) { aviso(error.message, true); return; }
+    bobinados = bobinados.filter((x) => x.id !== b.id);
+    aviso("Bobinado eliminado.");
+    location.hash = "bobinado";
+  };
+}
+
+// --- Impresión de la etiqueta ---
+async function imprimirBobinado(b) {
+  try {
+    await enviarLocal({
+      tipo: "bobinado",
+      qr: linkBob(b),
+      id: b.id,
+      cliente: b.cliente || "",
+      encargado: b.encargado || "",
+      motor: b.tipo_motor || "",
+      volt: b.volt || "",
+      kw: b.kw == null ? "" : numero(b.kw),
+      rpm: b.rpm == null ? "" : numero(b.rpm),
+      fecha: fechaBob(b.fecha),
+      empresa: "OMEGA ELÉCTRICA",
+      copias: 1,
+    });
+    marcaLocal();
+    aviso("Etiqueta enviada a la impresora.");
+    return;
+  } catch (err) {
+    if (esPcTaller()) { aviso("La impresora del taller no responde. ¿Está encendida y con papel?", true); return; }
+  }
+  const et = $("#etiqueta");
+  const src = `https://quickchart.io/qr?size=480&margin=2&ecLevel=M&dark=000000&light=ffffff&text=${encodeURIComponent(linkBob(b))}`;
+  const linea = (l, v) => (v ? `<div>${l}: ${esc(v)}</div>` : "");
+  et.innerHTML = `
+    <div class="tit">BOBINADO</div>
+    <img alt="" src="${src}">
+    <div class="id">${esc(b.id)}</div>
+    ${b.cliente ? `<div class="cli">${esc(b.cliente)}</div>` : ""}
+    <div class="det">
+      ${linea("Encargado", b.encargado)}${linea("Motor", b.tipo_motor)}${linea("Volt", b.volt)}
+      ${linea("KW", b.kw == null ? "" : numero(b.kw))}${linea("RPM", b.rpm == null ? "" : numero(b.rpm))}
+      ${linea("Fecha", fechaBob(b.fecha))}
+    </div>
+    <div class="emp">OMEGA ELÉCTRICA</div>`;
+  const img = $("img", et);
+  const lanzar = () => setTimeout(() => window.print(), 100);
+  if (img.complete) lanzar();
+  else { img.onload = lanzar; img.onerror = () => aviso("No se pudo generar el QR (¿sin internet?).", true); }
+}
+
+// --- Formulario ---
+function campoBob(c, val) {
+  const id = "fb-" + c.k;
+  const lab = `<label for="${id}" class="${c.req ? "req" : ""}">${esc(c.l)}</label>`;
+  if (c.fecha) return `${lab}<input id="${id}" name="${c.k}" type="date" required value="${esc(val)}">`;
+  const lista = c.k === "cliente" || c.k === "encargado" || c.k === "tipo_motor";
+  const dl = lista ? `<datalist id="dlb-${c.k}">${opcionesBob(c.k).map((o) => `<option value="${esc(o)}">`).join("")}</datalist>` : "";
+  return `${lab}<input id="${id}" name="${c.k}" type="text" autocomplete="off"${lista ? ` list="dlb-${c.k}"` : ""}` +
+    `${c.num ? ' inputmode="decimal"' : ""}${c.ph ? ` placeholder="${esc(c.ph)}"` : ""}${c.req ? " required" : ""} value="${esc(val)}">${dl}`;
+}
+
+async function verFormBob(id) {
+  mostrar("bobinado-form");
+  const f = $("#form-bobinado");
+  let b = null;
+  if (id) {
+    f.innerHTML = `<p class="vacio">Cargando…</p>`;
+    b = await buscarBob(id);
+    if (!b) { f.innerHTML = `<p class="vacio">No existe un bobinado con ID ${esc(id)}.</p>`; return; }
+  } else if (!bobinados.length) {
+    await cargarBobinados(); // para sugerir clientes y encargados ya usados
+  }
+  $("#form-bob-titulo").textContent = b ? `Editar bobinado ${b.id}` : "Nuevo bobinado";
+  const volver = b ? "#bobinado=" + encodeURIComponent(b.id) : "#bobinado";
+  $("#form-bob-volver").href = volver;
+  f.dataset.id = b ? b.id : "";
+  const val = (c) => {
+    if (!b) return c.fecha ? hoyISO() : "";
+    const v = b[c.k];
+    return v == null ? "" : c.num ? String(v).replace(".", ",") : v;
+  };
+  f.innerHTML = `
+    <div class="panel grupo">
+      <div class="grid2">${CAMPOS_BOB.map((c) => `<div>${campoBob(c, val(c))}</div>`).join("")}</div>
+    </div>
+    <div class="guardar">
+      <a class="btn" href="${volver}">Cancelar</a>
+      <button type="submit" class="primary" id="btn-guardar-bob">${b ? "Guardar cambios" : "Guardar y crear QR"}</button>
+    </div>`;
+  $("#fb-cliente").focus();
+}
+
+$("#form-bobinado").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (soloLectura()) return;
+  const f = ev.target;
+  const id = f.dataset.id;
+  const datos = {};
+  for (const c of CAMPOS_BOB) {
+    const v = (f.elements[c.k]?.value ?? "").trim();
+    if (c.req && !v) { aviso(`Falta ${c.l.toLowerCase()}.`, true); f.elements[c.k].focus(); return; }
+    if (c.num && v) {
+      const n = Number(v.replace(",", "."));
+      if (!Number.isFinite(n) || n < 0) { aviso(`${c.l} no es un número válido.`, true); f.elements[c.k].focus(); return; }
+      datos[c.k] = n;
+    } else {
+      datos[c.k] = v === "" ? null : v;
+    }
+  }
+  const btn = $("#btn-guardar-bob");
+  btn.disabled = true;
+  const res = id
+    ? await sb.from("bobinados").update(datos).eq("id", id).select().single()
+    : await sb.from("bobinados").insert(datos).select().single();
+  if (res.error) {
+    btn.disabled = false;
+    aviso("No se pudo guardar: " + res.error.message, true);
+    return;
+  }
+  guardarBob(res.data);
+  aviso(id ? "Cambios guardados." : `Bobinado ${res.data.id} creado.`);
+  location.hash = "bobinado=" + encodeURIComponent(res.data.id);
+});
+
 // ---------- Escáner ----------
 function extraerId(texto) {
   const t = String(texto).trim();
@@ -775,8 +1042,9 @@ async function verEscaner() {
   try {
     await lector.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 240, height: 240 } }, (texto) => {
       if (escaner !== lector) return;
-      const id = extraerId(texto);
-      detenerEscaner().then(() => { location.hash = "equipo=" + encodeURIComponent(id); });
+      const bob = String(texto).match(/[#&?]bobinado=([^&]+)/);
+      const destino = bob ? "bobinado=" + bob[1] : "equipo=" + encodeURIComponent(extraerId(texto));
+      detenerEscaner().then(() => { location.hash = destino; });
     });
   } catch (err) {
     if (escaner === lector) escaner = null;
