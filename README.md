@@ -21,6 +21,23 @@ Reemplazo de la app de AppSheet "Control Equipos". Es una página web que se abr
 
 > ⚠️ **Imprime los QR solo cuando la página ya esté publicada en su dirección definitiva.** El QR lleva la dirección desde donde se abrió la app; si la imprimes desde `localhost` no va a funcionar en los celulares.
 
+## Cuentas de cliente (solo lectura)
+
+Cada cliente puede tener su propia cuenta para **ver únicamente sus equipos**: ficha, mediciones, fotos y videos. No puede crear, editar, borrar, subir archivos ni imprimir etiquetas. Esto está protegido en la base de datos (Supabase), no solo en la pantalla: aunque alguien manipule la página, Supabase no le entrega ni le deja cambiar datos de otros.
+
+**Activarlo (una sola vez):** en Supabase → SQL Editor, pegar y ejecutar `clientes.sql`. Los usuarios que ya existen quedan como *personal* (acceso completo, igual que ahora). Hazlo **antes** de crear usuarios de clientes.
+
+**Crear una cuenta de cliente:**
+1. Supabase → Authentication → Users → *Add user* (correo y contraseña, marcando *Auto confirm user*).
+2. Abrir `alta-cliente.sql`, cambiar el nombre del cliente y el correo, y ejecutarlo en el SQL Editor.
+
+El nombre del cliente debe coincidir con lo que se escribe en el campo **Cliente** de los equipos (no importan mayúsculas ni espacios de más, pero sí las letras y las tildes: "Condominio X" no ve los equipos de "Condominio X2").
+
+**Reglas:**
+- Un usuario **sin perfil no ve nada** (así una cuenta creada por error no queda con acceso a todo). Las personas nuevas de Omega necesitan su perfil *personal*; el SQL está comentado al final de `alta-cliente.sql`.
+- El cliente ve todos los datos de su equipo, incluidos encargados, proceso y notas.
+- Para quitar el acceso a un cliente basta borrar su perfil (también está en `alta-cliente.sql`).
+
 ## Impresora térmica del taller (3nStar RPT004, Linux Mint)
 
 Esta impresora no entiende las imágenes que manda el navegador, pero sí imprime QR con su comando nativo. Por eso el PC del taller usa un pequeño servicio local (carpeta `impresora-taller/`):

@@ -40,6 +40,11 @@ const TEXTO = [...GENERAL, ...COMPONENTES, ...CIERRE, { k: "estado", l: "Estado"
 let equipos = [];
 let usuario = null;
 let canal = null;
+// Perfil de la cuenta: { rol: "personal" | "cliente", cliente } o null si aún no tiene acceso.
+// Los clientes solo ven sus equipos y no pueden modificar nada. Esto es solo la pantalla:
+// la protección real está en Supabase (clientes.sql).
+let perfil = null;
+const soloLectura = () => perfil?.rol !== "personal";
 let escaner = null;
 
 // ---------- Utilidades ----------
@@ -100,13 +105,35 @@ function setSesion(sesion) {
   $("#vista-login").hidden = !!usuario;
   $("#app").hidden = !usuario;
   if (usuario && !antes) {
-    cargarEquipos().then(router);
+    cargarPerfil().then(cargarEquipos).then(router);
     suscribir();
   }
   if (!usuario && antes) {
     equipos = [];
+    perfil = null;
+    aplicarPerfil();
     if (canal) { sb.removeChannel(canal); canal = null; }
   }
+}
+
+async function cargarPerfil() {
+  const { data, error } = await sb.from("perfiles").select("rol,cliente").eq("user_id", usuario.id).maybeSingle();
+  if (error) {
+    // Si todavía no se ejecutó clientes.sql (no existe la tabla), todos son personal como antes.
+    if (error.code === "PGRST205" || error.code === "42P01") perfil = { rol: "personal" };
+    else { perfil = null; aviso("No se pudo verificar tu cuenta: " + error.message, true); }
+  } else {
+    perfil = data;
+  }
+  aplicarPerfil();
+}
+
+// Muestra u oculta lo que solo puede usar el personal de Omega.
+function aplicarPerfil() {
+  document.body.classList.toggle("solo-lectura", soloLectura());
+  const c = $("#cuenta");
+  c.textContent = perfil?.rol === "cliente" ? perfil.cliente : "";
+  c.hidden = !c.textContent;
 }
 
 $("#form-login").addEventListener("submit", async (ev) => {
@@ -162,6 +189,7 @@ function router() {
   const h = location.hash.slice(1);
   const p = new URLSearchParams(h);
   if (h !== "escanear") detenerEscaner();
+  if (soloLectura() && (p.has("editar") || h === "nuevo")) { location.hash = ""; return; }
   if (p.has("equipo")) return verDetalle(p.get("equipo"));
   if (p.has("editar")) return verFormulario(p.get("editar"));
   if (h === "nuevo") return verFormulario(null);
@@ -195,7 +223,10 @@ function renderLista() {
         <div class="muted">${esc(e.tipo_motor || "")}${e.tipo_voltaje ? " · " + esc(e.tipo_voltaje) : ""}</div>
         <div class="muted small">ID ${esc(e.id)} · ${fecha(e.creado_en)}${e.encargados ? " · " + esc(e.encargados) : ""}</div>
       </a>`).join("")
-    : `<p class="vacio">${equipos.length ? "No hay equipos que coincidan." : "Todavía no hay equipos. Toca “+ Nuevo equipo”."}</p>`;
+    : `<p class="vacio">${equipos.length ? "No hay equipos que coincidan."
+        : !perfil ? "Tu cuenta todavía no tiene acceso asignado. Avisa a Omega Eléctrica."
+        : soloLectura() ? "Todavía no hay equipos registrados para tu cuenta."
+        : "Todavía no hay equipos. Toca “+ Nuevo equipo”."}</p>`;
 }
 $("#buscar").addEventListener("input", renderLista);
 $("#filtro-estado").addEventListener("change", renderLista);
@@ -220,7 +251,7 @@ async function verDetalle(id, refresco = false) {
   const cont = $("#detalle");
   if (!refresco) cont.innerHTML = `<p class="vacio">Cargando…</p>`;
   const e = await buscarEquipo(id);
-  if (!e) { cont.innerHTML = `<p class="vacio">No existe un equipo con ID ${esc(id)}.</p>`; return; }
+  if (!e) { cont.innerHTML = `<p class="vacio">No existe un equipo con ID ${esc(id)}${soloLectura() ? " o no tienes acceso a él" : ""}.</p>`; return; }
   const link = linkEquipo(e.id);
   cont.innerHTML = `
     <div class="panel">
@@ -239,7 +270,7 @@ async function verDetalle(id, refresco = false) {
         <div class="muted small">ID del equipo</div>
         <div style="font-size:22px;font-weight:700;letter-spacing:1px;margin-bottom:8px">${esc(e.id)}</div>
         <div class="botones">
-          <button type="button" id="btn-imprimir" class="primary">Imprimir etiqueta QR</button>
+          <button type="button" id="btn-imprimir" class="primary solo-personal">Imprimir etiqueta QR</button>
           <button type="button" id="btn-copiar">Copiar enlace</button>
         </div>
       </div>
@@ -270,7 +301,7 @@ async function verDetalle(id, refresco = false) {
     <div class="panel">
       <h2>Fotos</h2>
       <div id="fotos" class="galeria"></div>
-      <label class="btn subir">+ Agregar fotos
+      <label class="btn subir solo-personal">+ Agregar fotos
         <input type="file" id="in-fotos" accept="image/*" multiple>
       </label>
     </div>
@@ -278,13 +309,13 @@ async function verDetalle(id, refresco = false) {
     <div class="panel">
       <h2>Videos</h2>
       <div id="videos" class="videos"></div>
-      <label class="btn subir">+ Agregar video
+      <label class="btn subir solo-personal">+ Agregar video
         <input type="file" id="in-videos" accept="video/*" multiple>
       </label>
-      <p class="muted small" style="margin:8px 0 0">Máximo 50 MB por video.</p>
+      <p class="muted small solo-personal" style="margin:8px 0 0">Máximo 50 MB por video.</p>
     </div>
 
-    <div class="fila-acciones">
+    <div class="fila-acciones solo-personal">
       <a class="btn primary" href="#editar=${encodeURIComponent(e.id)}">Editar</a>
       <button type="button" class="peligro" id="btn-eliminar">Eliminar equipo</button>
     </div>
@@ -341,6 +372,7 @@ async function cargarMedios(id) {
 }
 
 async function borrarMedio(tabla, mid, ruta, equipoId) {
+  if (soloLectura()) return;
   if (!confirm(tabla === "fotos_equipo" ? "¿Borrar esta foto?" : "¿Borrar este video?")) return;
   const { error } = await sb.from(tabla).delete().eq("id", mid);
   if (error) { aviso(error.message, true); return; }
@@ -366,6 +398,7 @@ async function reducirImagen(file, max = 1600) {
 }
 
 async function subirArchivos(equipoId, files, tipo) {
+  if (soloLectura()) return;
   const lista = [...(files || [])];
   if (!lista.length) return;
   const tabla = tipo === "foto" ? "fotos_equipo" : "videos_equipo";
@@ -446,6 +479,7 @@ async function imprimirEtiqueta(e) {
 }
 
 async function eliminarEquipo(e) {
+  if (soloLectura()) return;
   if (!confirm(`¿Eliminar el equipo ${e.id} (${e.cliente || "sin cliente"}) con todas sus fotos y videos? No se puede deshacer.`)) return;
   const [f, v] = await Promise.all([
     sb.from("fotos_equipo").select("ruta").eq("equipo_id", e.id),
@@ -532,6 +566,7 @@ async function verFormulario(id) {
 
 $("#form-equipo").addEventListener("submit", async (ev) => {
   ev.preventDefault();
+  if (soloLectura()) return;
   const f = ev.target;
   const id = f.dataset.id;
   const datos = {};

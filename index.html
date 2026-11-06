@@ -61,7 +61,10 @@
            gap: 8px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
   .marca { font-weight: 700; color: var(--text); text-decoration: none; font-size: 18px; }
   .marca span { color: var(--accent); }
-  .barra .der { display: flex; gap: 6px; }
+  .barra .der { display: flex; gap: 6px; align-items: center; }
+  #cuenta { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Cuentas de cliente: solo lectura */
+  .solo-lectura .solo-personal, .solo-lectura .quitar { display: none !important; }
   main { max-width: 900px; margin: 0 auto; padding: 16px; }
 
   /* Lista */
@@ -161,6 +164,7 @@
   <header class="barra">
     <a href="#" class="marca">Control <span>Equipos</span></a>
     <div class="der">
+      <span id="cuenta" class="muted small" hidden></span>
       <button class="ghost" id="btn-instalar" hidden>Instalar app</button>
       <button class="ghost" id="btn-salir" title="Cerrar sesión">Salir</button>
     </div>
@@ -169,7 +173,7 @@
   <main>
     <section id="vista-lista" class="vista">
       <div class="acciones">
-        <a class="btn primary" href="#nuevo">+ Nuevo equipo</a>
+        <a class="btn primary solo-personal" href="#nuevo">+ Nuevo equipo</a>
         <a class="btn" href="#escanear">Escanear QR</a>
         <button id="btn-csv" type="button">Exportar CSV</button>
       </div>
