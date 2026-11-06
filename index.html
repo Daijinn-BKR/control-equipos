@@ -64,6 +64,9 @@
   .barra .der { display: flex; gap: 6px; align-items: center; }
   #cuenta { max-width: 38vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Cuentas de cliente: solo lectura */
+  .cuenta { padding: 10px 0; border-top: 1px solid var(--line); }
+  .cuenta-ctl { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+  .cuenta-ctl input { flex: 1 1 200px; min-width: 0; }
   .solo-lectura .solo-personal, .solo-lectura .quitar { display: none !important; }
   main { max-width: 900px; margin: 0 auto; padding: 16px; }
 
@@ -175,6 +178,7 @@
       <div class="acciones">
         <a class="btn primary solo-personal" href="#nuevo">+ Nuevo equipo</a>
         <a class="btn" href="#escanear">Escanear QR</a>
+        <a class="btn solo-personal" href="#cuentas">Cuentas de clientes</a>
         <button id="btn-csv" type="button">Exportar CSV</button>
       </div>
       <div class="filtros">
@@ -188,6 +192,13 @@
     <section id="vista-detalle" class="vista" hidden>
       <a href="#" class="volver">← Equipos</a>
       <div id="detalle"></div>
+    </section>
+
+    <section id="vista-cuentas" class="vista" hidden>
+      <a href="#" class="volver">← Equipos</a>
+      <h1>Cuentas de clientes</h1>
+      <p class="muted small" id="cuentas-ayuda"></p>
+      <div id="cuentas-lista"></div>
     </section>
 
     <section id="vista-form" class="vista" hidden>

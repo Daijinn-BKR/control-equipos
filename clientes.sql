@@ -111,3 +111,49 @@ create policy "equipos_archivos_cambiar" on storage.objects
 drop policy if exists "equipos_archivos_borrar" on storage.objects;
 create policy "equipos_archivos_borrar" on storage.objects
   for delete to authenticated using (bucket_id = 'equipos' and es_personal());
+
+-- ============ ADMINISTRAR CUENTAS DESDE LA APP (solo personal) ============
+-- La pantalla "Cuentas" de la app usa estas funciones. Si quien las llama no es personal,
+-- no devuelven nada o fallan: un cliente no puede ver correos ni cambiar perfiles.
+
+create or replace function cuentas_listar()
+returns table (user_id uuid, email text, rol text, cliente text)
+language sql stable security definer set search_path = public as $$
+  select u.id, u.email::text, p.rol, p.cliente
+  from auth.users u
+  left join perfiles p on p.user_id = u.id
+  where es_personal()
+  order by (p.rol is not null), p.rol, lower(p.cliente), lower(u.email)
+$$;
+
+create or replace function cuenta_asignar(p_user uuid, p_rol text, p_cliente text default null)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not es_personal() then raise exception 'No autorizado'; end if;
+  if p_rol not in ('personal', 'cliente') then raise exception 'Rol inválido'; end if;
+  if p_rol = 'cliente' and nullif(btrim(p_cliente), '') is null then
+    raise exception 'Falta el nombre del cliente';
+  end if;
+  if p_user = auth.uid() and p_rol <> 'personal' then
+    raise exception 'No puedes quitarte a ti mismo el acceso de personal';
+  end if;
+  if not exists (select 1 from auth.users where id = p_user) then
+    raise exception 'No existe ese usuario';
+  end if;
+  insert into perfiles (user_id, rol, cliente)
+  values (p_user, p_rol, case when p_rol = 'cliente' then btrim(p_cliente) end)
+  on conflict (user_id) do update set rol = excluded.rol, cliente = excluded.cliente;
+end $$;
+
+create or replace function cuenta_quitar(p_user uuid)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not es_personal() then raise exception 'No autorizado'; end if;
+  if p_user = auth.uid() then raise exception 'No puedes quitarte a ti mismo el acceso'; end if;
+  delete from perfiles where user_id = p_user;
+end $$;
+
+revoke execute on function cuentas_listar(), cuenta_asignar(uuid, text, text), cuenta_quitar(uuid) from public, anon;
+grant  execute on function cuentas_listar(), cuenta_asignar(uuid, text, text), cuenta_quitar(uuid) to authenticated;

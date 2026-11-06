@@ -25,16 +25,18 @@ Reemplazo de la app de AppSheet "Control Equipos". Es una página web que se abr
 
 Cada cliente puede tener su propia cuenta para **ver únicamente sus equipos**: ficha, mediciones, fotos y videos. No puede crear, editar, borrar, subir archivos ni imprimir etiquetas. Esto está protegido en la base de datos (Supabase), no solo en la pantalla: aunque alguien manipule la página, Supabase no le entrega ni le deja cambiar datos de otros.
 
-**Activarlo (una sola vez):** en Supabase → SQL Editor, pegar y ejecutar `clientes.sql`. Los usuarios que ya existen quedan como *personal* (acceso completo, igual que ahora). Hazlo **antes** de crear usuarios de clientes.
+**Activarlo:** en Supabase → SQL Editor, pegar y ejecutar `clientes.sql` completo (también cuando se actualiza este archivo: se puede repetir sin problema). Los usuarios que ya existen quedan como *personal* (acceso completo, igual que ahora). Hazlo **antes** de crear usuarios de clientes.
 
 **Crear una cuenta de cliente:**
-1. Supabase → Authentication → Users → *Add user* (correo y contraseña, marcando *Auto confirm user*).
-2. Abrir `alta-cliente.sql`, cambiar el nombre del cliente y el correo, y ejecutarlo en el SQL Editor.
+1. Supabase → Authentication → Users → *Add user* (correo y contraseña, marcando *Auto Confirm User*).
+2. En la app, entrar con una cuenta de personal → **Cuentas de clientes**. La cuenta nueva aparece en *Sin asignar*: se elige el cliente de la lista (o se escribe uno nuevo) y se pulsa **Guardar**.
 
-El nombre del cliente debe coincidir con lo que se escribe en el campo **Cliente** de los equipos (no importan mayúsculas ni espacios de más, pero sí las letras y las tildes: "Condominio X" no ve los equipos de "Condominio X2").
+Desde esa misma pantalla se puede cambiar a alguien a *Personal de Omega* o **Quitar acceso**. (`alta-cliente.sql` hace lo mismo desde el SQL Editor y queda como alternativa.)
+
+En el formulario de un equipo, el campo **Cliente** sugiere los nombres que ya existen, para que se escriban siempre igual.
 
 **Reglas:**
-- Un usuario **sin perfil no ve nada** (así una cuenta creada por error no queda con acceso a todo). Las personas nuevas de Omega necesitan su perfil *personal*; el SQL está comentado al final de `alta-cliente.sql`.
+- Un usuario **sin perfil no ve nada** (así una cuenta creada por error no queda con acceso a todo). Las personas nuevas de Omega necesitan su perfil *personal*: se les da en la pantalla **Cuentas de clientes**.
 - El cliente ve todos los datos de su equipo, incluidos encargados, proceso y notas.
 - Para quitar el acceso a un cliente basta borrar su perfil (también está en `alta-cliente.sql`).
 

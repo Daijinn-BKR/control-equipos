@@ -1,5 +1,7 @@
 -- Control de Equipos · Omega Eléctrica
--- ALTA DE UNA CUENTA DE CLIENTE
+-- ALTA DE UNA CUENTA DE CLIENTE (alternativa por SQL)
+--
+-- Normalmente no hace falta: en la app, pantalla "Cuentas de clientes", se asigna con un clic.
 --
 -- 1) Supabase → Authentication → Users → Add user → correo y contraseña del cliente
 --    (marcar "Auto confirm user").

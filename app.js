@@ -13,7 +13,7 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) =>
 
 // ---------- Campos (mismo orden que la app de AppSheet) ----------
 const GENERAL = [
-  { k: "cliente", l: "Cliente", req: true },
+  { k: "cliente", l: "Cliente", req: true, op: "cliente" },
   { k: "tipo_motor", l: "Tipo de motor", op: "tipo_motor" },
   { k: "tipo_voltaje", l: "Tipo de voltaje" },
   { k: "tipo_mantenimiento", l: "Tipo de mantenimiento", op: "tipo_mantenimiento" },
@@ -86,7 +86,12 @@ function unicos(lista) {
   return [...new Set(lista.filter((v) => v != null && String(v).trim() !== ""))];
 }
 function opciones(op) {
-  return unicos([...(OPC[op] || []), ...equipos.map((e) => e[op])]);
+  const lista = unicos([...(OPC[op] || []), ...equipos.map((e) => e[op])]);
+  if (op !== "cliente") return lista;
+  // Clientes: "Condominio Y" y " condominio  y " son el mismo nombre; se muestra solo uno.
+  const vistos = new Map();
+  for (const n of lista) { const k = normNombre(n); if (!vistos.has(k)) vistos.set(k, String(n).trim()); }
+  return [...vistos.values()];
 }
 function numero(v) {
   return v == null ? "—" : String(v).replace(".", ",");
@@ -189,15 +194,94 @@ function router() {
   const h = location.hash.slice(1);
   const p = new URLSearchParams(h);
   if (h !== "escanear") detenerEscaner();
-  if (soloLectura() && (p.has("editar") || h === "nuevo")) { location.hash = ""; return; }
+  if (soloLectura() && (p.has("editar") || h === "nuevo" || h === "cuentas")) { location.hash = ""; return; }
   if (p.has("equipo")) return verDetalle(p.get("equipo"));
   if (p.has("editar")) return verFormulario(p.get("editar"));
   if (h === "nuevo") return verFormulario(null);
   if (h === "escanear") return verEscaner();
+  if (h === "cuentas") return verCuentas();
   mostrar("lista");
   renderLista();
 }
 window.addEventListener("hashchange", router);
+
+// ---------- Cuentas de clientes (solo personal) ----------
+// Las cuentas (correo y contraseña) se crean en Supabase → Authentication → Users → Add user.
+// Aquí el personal les asigna un cliente (o las deja como personal). La seguridad real está
+// en las funciones de clientes.sql: un cliente no puede usarlas aunque abra esta pantalla.
+const normNombre = (s) => String(s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+
+async function verCuentas() {
+  mostrar("cuentas");
+  const ref = new URL(CFG.SUPABASE_URL).hostname.split(".")[0];
+  $("#cuentas-ayuda").innerHTML =
+    `Para crear una cuenta nueva: <a href="https://supabase.com/dashboard/project/${esc(ref)}/auth/users" target="_blank" rel="noopener">Supabase → Authentication → Users → Add user</a> ` +
+    `(marca <b>Auto Confirm User</b>). Después aparece aquí, en “Sin asignar”, y le eliges el cliente.`;
+  const cont = $("#cuentas-lista");
+  cont.innerHTML = `<p class="vacio">Cargando…</p>`;
+  const { data, error } = await sb.rpc("cuentas_listar");
+  if (error) { cont.innerHTML = `<p class="vacio">No se pudo cargar: ${esc(error.message)}</p>`; return; }
+
+  const vistos = new Map();
+  for (const n of [...opciones("cliente"), ...data.filter((c) => c.rol === "cliente").map((c) => c.cliente)]) {
+    if (normNombre(n) && !vistos.has(normNombre(n))) vistos.set(normNombre(n), String(n).trim());
+  }
+  const nombres = [...vistos.values()].sort((a, b) => a.localeCompare(b, "es"));
+
+  const fila = (c) => {
+    const yo = c.user_id === usuario.id;
+    const rol = c.rol || "cliente";
+    return `
+      <div class="cuenta" data-id="${esc(c.user_id)}">
+        <div><strong>${esc(c.email)}</strong>${yo ? ' <span class="chip proceso">Tú</span>' : ""}</div>
+        <div class="cuenta-ctl">
+          <select class="c-rol" aria-label="Tipo de cuenta"${yo ? " disabled" : ""}>
+            <option value="cliente"${rol === "cliente" ? " selected" : ""}>Cliente (solo ve lo suyo)</option>
+            <option value="personal"${rol === "personal" ? " selected" : ""}>Personal de Omega (acceso completo)</option>
+          </select>
+          <input class="c-cli" list="dl-clientes" placeholder="Nombre del cliente" value="${esc(c.cliente || "")}" autocomplete="off"${yo ? " hidden" : ""}>
+          ${yo ? "" : `<button type="button" class="primary c-guardar">Guardar</button>`}
+          ${yo || !c.rol ? "" : `<button type="button" class="peligro c-quitar">Quitar acceso</button>`}
+        </div>
+      </div>`;
+  };
+  const grupo = (titulo, nota, lista) => lista.length
+    ? `<div class="panel"><h2>${titulo}</h2>${nota ? `<p class="muted small" style="margin:0 0 4px">${nota}</p>` : ""}${lista.map(fila).join("")}</div>` : "";
+
+  cont.innerHTML =
+    `<datalist id="dl-clientes">${nombres.map((n) => `<option value="${esc(n)}">`).join("")}</datalist>` +
+    grupo("Sin asignar", "Pueden entrar, pero no ven nada hasta que les asignes un cliente.", data.filter((c) => !c.rol)) +
+    grupo("Clientes", "", data.filter((c) => c.rol === "cliente")) +
+    grupo("Personal de Omega", "", data.filter((c) => c.rol === "personal")) +
+    (data.length ? "" : `<p class="vacio">Todavía no hay cuentas.</p>`);
+
+  for (const f of cont.querySelectorAll(".cuenta")) {
+    const rol = $(".c-rol", f), cli = $(".c-cli", f);
+    const sync = () => { cli.hidden = rol.value !== "cliente" || rol.disabled; };
+    sync();
+    rol.onchange = sync;
+    const guardar = $(".c-guardar", f), quitar = $(".c-quitar", f);
+    if (guardar) guardar.onclick = async () => {
+      const email = $("strong", f).textContent;
+      if (rol.value === "cliente" && !cli.value.trim()) { aviso("Escribe o elige el nombre del cliente.", true); cli.focus(); return; }
+      if (rol.value === "personal" && !confirm(`¿Dar acceso COMPLETO (ver, editar y borrar todo) a ${email}?`)) return;
+      guardar.disabled = true;
+      const { error } = await sb.rpc("cuenta_asignar", {
+        p_user: f.dataset.id, p_rol: rol.value, p_cliente: rol.value === "cliente" ? cli.value.trim() : null,
+      });
+      if (error) { guardar.disabled = false; aviso(error.message, true); return; }
+      aviso("Guardado.");
+      verCuentas();
+    };
+    if (quitar) quitar.onclick = async () => {
+      if (!confirm(`¿Quitar el acceso a ${$("strong", f).textContent}? Podrá entrar, pero no verá nada.`)) return;
+      const { error } = await sb.rpc("cuenta_quitar", { p_user: f.dataset.id });
+      if (error) { aviso(error.message, true); return; }
+      aviso("Acceso quitado.");
+      verCuentas();
+    };
+  }
+}
 
 // ---------- Lista ----------
 function llenarFiltroEstado() {
