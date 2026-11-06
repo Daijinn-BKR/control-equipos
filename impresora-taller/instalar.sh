@@ -6,6 +6,7 @@ set -e
 DIR="$HOME/impresora-taller"
 mkdir -p "$DIR" "$HOME/.config/systemd/user"
 cp "$(dirname "$0")/servidor.py" "$DIR/servidor.py"
+cp "$(dirname "$0")/logo_etiqueta.bin" "$DIR/logo_etiqueta.bin"
 
 cat > "$HOME/.config/systemd/user/impresora-taller.service" <<UNIT
 [Unit]

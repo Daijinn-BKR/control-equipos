@@ -10,7 +10,9 @@ directo a la cola de CUPS en modo "raw" (sin pasar por el driver de imagen).
 import json
 import subprocess
 import sys
+import textwrap
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 PUERTO = 9101
 IMPRESORA = "POS80"          # nombre de la cola en CUPS (lpstat -p)
@@ -24,6 +26,25 @@ ORIGENES_PERMITIDOS = {
 }
 
 ESC, GS = b"\x1b", b"\x1d"
+
+# Logo de Omega ya convertido a imagen para la impresora (384 puntos de ancho).
+# Si el archivo no está, la etiqueta se imprime igual, sin logo.
+try:
+    LOGO = Path(__file__).with_name("logo_etiqueta.bin").read_bytes()
+except OSError:
+    LOGO = b""
+
+ANCHO_CLIENTE = 24           # caracteres por línea con el nombre en doble tamaño
+LINEAS_CLIENTE = 2
+
+
+def lineas_cliente(nombre):
+    """Parte el nombre del cliente en hasta 2 líneas; si no cabe, lo recorta con '...'."""
+    ls = textwrap.wrap(str(nombre or "").strip(), ANCHO_CLIENTE, break_long_words=True) or []
+    if len(ls) > LINEAS_CLIENTE:
+        ls = ls[:LINEAS_CLIENTE]
+        ls[-1] = ls[-1][:ANCHO_CLIENTE - 3].rstrip() + "..."
+    return ls
 
 
 def cod(texto, maximo):
@@ -52,16 +73,19 @@ def etiqueta(d):
     b = ESC + b"@"                                     # reiniciar
     b += ESC + b"t\x02"                                # tabla de caracteres CP850
     b += ESC + b"a\x01"                                # centrar
+    if LOGO:
+        b += LOGO + b"\n"                              # logo encima del QR
     b += qr_nativo(qr) + b"\n"
-    b += ESC + b"E\x01" + GS + b"!\x11"                # negrita + doble tamaño
-    b += cod(d.get("id"), 20) + b"\n"
-    b += GS + b"!\x00"                                 # tamaño normal
-    if d.get("cliente"):
-        b += cod(d["cliente"], 48) + b"\n"
-    b += ESC + b"E\x00"
+    b += ESC + b"E\x01"                                # negrita
+    b += cod(d.get("id"), 32) + b"\n"                  # ID en tamaño normal
+    b += GS + b"!\x11"                                 # doble tamaño
+    for linea in lineas_cliente(d.get("cliente")):
+        b += cod(linea, ANCHO_CLIENTE) + b"\n"         # cliente grande
+    b += GS + b"!\x00" + ESC + b"E\x00"                # tamaño normal, sin negrita
     if d.get("fecha"):
         b += cod("Ingreso: " + str(d["fecha"]), 48) + b"\n"
-    b += ESC + b"E\x01" + cod(d.get("empresa") or "OMEGA ELÉCTRICA", 32) + b"\n" + ESC + b"E\x00"
+    if not LOGO:                                       # sin logo, nombre de la empresa en texto
+        b += ESC + b"E\x01" + cod(d.get("empresa") or "OMEGA ELÉCTRICA", 32) + b"\n" + ESC + b"E\x00"
     b += b"\n\n\n"
     if CORTAR:
         b += GS + b"V\x42\x00"
